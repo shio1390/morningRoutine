@@ -1,7 +1,150 @@
-﻿import{all,put,del,STORES,dump,restore}from'./db.js';import{settings,save,ask,start}from'./notification.js';import*as ui from'./ui.js';
-const app=document.querySelector('#app'),date=()=>new Date().toLocaleDateString('sv-SE'),uid=()=>crypto.randomUUID();let state={routines:[],favorites:[],settings:{},edit:null};const maxOrder=x=>x.length?Math.max(...x.map(y=>y.order||0))+1:0;
-async function load(){[state.routines,state.favorites,state.settings]=await Promise.all([all(STORES.ROUTINES),all(STORES.FAVORITES),settings()])}function page(){return location.hash.slice(1)||'home'}function render(){const p=page();app.innerHTML=p==='routine'?ui.routine(state.routines,state.favorites):p==='favorites'?ui.favorites(state.favorites):p==='settings'?ui.config(state.settings):ui.home(state.routines,date());document.querySelectorAll('[data-nav]').forEach(x=>x.classList.toggle('active',x.dataset.nav===p));bindDrag()}async function refresh(){await load();render()}
-async function add(kind,text,favoriteId=null){text=text.trim();if(!text)return;const list=kind==='routine'?state.routines:state.favorites;const item={id:uid(),text,order:maxOrder(list)};if(kind==='routine')Object.assign(item,{favoriteId,completedDates:[]});await put(kind==='routine'?STORES.ROUTINES:STORES.FAVORITES,item);await refresh()}async function toggle(id){const r=state.routines.find(x=>x.id===id);if(!r)return;const dates=new Set(r.completedDates||[]),was=dates.has(date());was?dates.delete(date()):dates.add(date());await put(STORES.ROUTINES,{...r,completedDates:[...dates].slice(-14)});await refresh();if(!was&&state.routines.every(x=>x.id===id||x.completedDates?.includes(date())))ui.hanamaru()}
-async function erase(kind,id){if(!confirm('けしてもいい？'))return;await del(kind==='routine'?STORES.ROUTINES:STORES.FAVORITES,id);await refresh()}function edit(kind,id){const item=(kind==='routine'?state.routines:state.favorites).find(x=>x.id===id);if(!item)return;state.edit={kind,item};document.querySelector('#modal-root').innerHTML=ui.modal(item.text)}async function commit(form){const text=new FormData(form).get('text').trim();if(!text||!state.edit)return;const{kind,item}=state.edit;await put(kind==='routine'?STORES.ROUTINES:STORES.FAVORITES,{...item,text});state.edit=null;document.querySelector('#modal-root').innerHTML='';await refresh()}
-function bindDrag(){document.querySelectorAll('[data-sortable]').forEach(list=>{let from;list.ondragstart=e=>{const row=e.target.closest('.list-item');if(row){from=row.dataset.id;row.classList.add('dragging')}};list.ondragend=e=>e.target.closest('.list-item')?.classList.remove('dragging');list.ondragover=e=>e.preventDefault();list.ondrop=async e=>{e.preventDefault();const target=e.target.closest('.list-item'),type=list.dataset.sortable;if(!target||from===target.dataset.id)return;const rows=[...(type==='routine'?state.routines:state.favorites)].sort((a,b)=>a.order-b.order),a=rows.findIndex(x=>x.id===from),b=rows.findIndex(x=>x.id===target.dataset.id),[moved]=rows.splice(a,1);rows.splice(b,0,moved);await Promise.all(rows.map((x,i)=>put(type==='routine'?STORES.ROUTINES:STORES.FAVORITES,{...x,order:i})));await refresh()}})}
-document.addEventListener('submit',async e=>{e.preventDefault();if(e.target.id==='routine-form')add('routine',new FormData(e.target).get('text'));if(e.target.id==='favorite-form')add('favorite',new FormData(e.target).get('text'));if(e.target.id==='edit-form')commit(e.target)});document.addEventListener('click',async e=>{const el=e.target.closest('[data-action]');if(!el)return;const a=el.dataset.action,id=el.dataset.id;if(a==='toggle')toggle(id);if(a==='add-fav'){const f=state.favorites.find(x=>x.id===id);if(f)add('routine',f.text,f.id)}if(a.startsWith('edit-'))edit(a.slice(5),id);if(a.startsWith('delete-'))erase(a.slice(7),id);if(a==='close'){state.edit=null;document.querySelector('#modal-root').innerHTML=''}if(a==='open-settings')location.hash='settings';if(a==='export'){const blob=new Blob([JSON.stringify(await dump(),null,2)],{type:'application/json'}),link=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`asajitaku-${date()}.json`});link.click();URL.revokeObjectURL(link.href)}});document.addEventListener('change',async e=>{const k=e.target.dataset.setting;if(k){try{if(k==='notifications'&&e.target.checked)await ask();await save({[k]:e.target.type==='checkbox'?e.target.checked:e.target.value});await refresh();ui.toast('設定を保存したよ')}catch(err){e.target.checked=false;ui.toast(err.message)}}if(e.target.dataset.action==='import'){try{await restore(JSON.parse(await e.target.files[0].text()));await refresh();ui.toast('データを読み込んだよ')}catch(err){ui.toast(err.message||'読み込みに失敗したよ')}}});window.addEventListener('hashchange',render);async function init(){await load();render();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js');start()}init().catch(e=>{console.error(e);app.innerHTML='<div class="empty">データを読み込めなかったよ。</div>'});
+﻿import { all, put, del, clear, STORES, dump, restore } from './db.js';
+import { settings, save, ask, start } from './notification.js';
+import * as ui from './ui.js';
+
+const app = document.querySelector('#app'), date = () => new Date().toLocaleDateString('sv-SE'), uid = () => crypto.randomUUID();
+let state = { routines: [], favorites: [], settings: {}, edit: null };
+const maxOrder = x => x.length ? Math.max(...x.map(y => y.order || 0)) + 1 : 0;
+
+async function load() { [state.routines, state.favorites, state.settings] = await Promise.all([all(STORES.ROUTINES), all(STORES.FAVORITES), settings()]) }
+function page() { return location.hash.slice(1) || 'home' }
+function render() {
+  const p = page();
+  app.innerHTML = p === 'routine' ? ui.routine(state.routines, state.favorites) : p === 'favorites' ? ui.favorites(state.favorites) : p === 'settings' ? ui.config(state.settings) : ui.home(state.routines, date());
+  document.querySelectorAll('[data-nav]').forEach(x => x.classList.toggle('active', x.dataset.nav === p));
+  bindDrag();
+}
+async function refresh() { await load(); render() }
+
+// 引数に icon を追加
+async function add(kind, text, icon, favoriteId = null) {
+  text = text.trim();
+  if (!text) return;
+  icon = (icon || '').trim() || '✨'; // アイコンがない場合はデフォルトを設定
+  const list = kind === 'routine' ? state.routines : state.favorites;
+  const item = { id: uid(), text, icon, order: maxOrder(list) };
+  if (kind === 'routine') Object.assign(item, { favoriteId, completedDates: [] });
+  await put(kind === 'routine' ? STORES.ROUTINES : STORES.FAVORITES, item);
+  await refresh();
+}
+
+async function toggle(id) {
+  const r = state.routines.find(x => x.id === id);
+  if (!r) return;
+  const dates = new Set(r.completedDates || []), was = dates.has(date());
+  was ? dates.delete(date()) : dates.add(date());
+  await put(STORES.ROUTINES, { ...r, completedDates: [...dates].slice(-14) });
+  await refresh();
+  if (!was && state.routines.every(x => x.id === id || x.completedDates?.includes(date()))) ui.hanamaru();
+}
+
+async function erase(kind, id) {
+  if (!confirm('けしてもいい？')) return;
+  await del(kind === 'routine' ? STORES.ROUTINES : STORES.FAVORITES, id);
+  await refresh();
+}
+
+// 編集時は item 全体を渡す
+function edit(kind, id) {
+  const item = (kind === 'routine' ? state.routines : state.favorites).find(x => x.id === id);
+  if (!item) return;
+  state.edit = { kind, item };
+  document.querySelector('#modal-root').innerHTML = ui.modal(item);
+}
+
+// フォームから text と icon を取得
+async function commit(form) {
+  const fd = new FormData(form);
+  const text = fd.get('text').trim();
+  const icon = (fd.get('icon') || '✨').trim();
+  if (!text || !state.edit) return;
+  const { kind, item } = state.edit;
+  await put(kind === 'routine' ? STORES.ROUTINES : STORES.FAVORITES, { ...item, text, icon });
+  state.edit = null;
+  document.querySelector('#modal-root').innerHTML = '';
+  await refresh();
+}
+
+function bindDrag() {
+  document.querySelectorAll('[data-sortable]').forEach(list => {
+    let from;
+    list.ondragstart = e => { const row = e.target.closest('.list-item'); if (row) { from = row.dataset.id; row.classList.add('dragging') } };
+    list.ondragend = e => e.target.closest('.list-item')?.classList.remove('dragging');
+    list.ondragover = e => e.preventDefault();
+    list.ondrop = async e => {
+      e.preventDefault();
+      const target = e.target.closest('.list-item'), type = list.dataset.sortable;
+      if (!target || from === target.dataset.id) return;
+      const rows = [...(type === 'routine' ? state.routines : state.favorites)].sort((a, b) => a.order - b.order), a = rows.findIndex(x => x.id === from), b = rows.findIndex(x => x.id === target.dataset.id), [moved] = rows.splice(a, 1);
+      rows.splice(b, 0, moved);
+      await Promise.all(rows.map((x, i) => put(type === 'routine' ? STORES.ROUTINES : STORES.FAVORITES, { ...x, order: i })));
+      await refresh();
+    }
+  })
+}
+
+document.addEventListener('submit', async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  if (e.target.id === 'routine-form') add('routine', fd.get('text'), fd.get('icon'));
+  if (e.target.id === 'favorite-form') add('favorite', fd.get('text'), fd.get('icon'));
+  if (e.target.id === 'edit-form') commit(e.target);
+});
+
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const a = el.dataset.action, id = el.dataset.id;
+  if (a === 'toggle') toggle(id);
+  if (a === 'add-fav') {
+    const f = state.favorites.find(x => x.id === id);
+    if (f) add('routine', f.text, f.icon, f.id);
+  }
+  if (a.startsWith('edit-')) edit(a.slice(5), id);
+  if (a.startsWith('delete-')) erase(a.slice(7), id);
+  if (a === 'close') { state.edit = null; document.querySelector('#modal-root').innerHTML = '' }
+  if (a === 'open-settings') location.hash = 'settings';
+  
+  // またあしたボタンによるリセット処理
+  if (a === 'reset-routines') {
+    if (!confirm('今日のリストをリセットして、あしたの準備をする？')) return;
+    await clear(STORES.ROUTINES);
+    await refresh();
+    ui.toast('またあした！');
+  }
+
+  if (a === 'export') {
+    const blob = new Blob([JSON.stringify(await dump(), null, 2)], { type: 'application/json' }), link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `asajitaku-${date()}.json` });
+    link.click(); URL.revokeObjectURL(link.href);
+  }
+});
+
+document.addEventListener('change', async e => {
+  const k = e.target.dataset.setting;
+  if (k) {
+    try {
+      if (k === 'notifications' && e.target.checked) await ask();
+      await save({ [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+      await refresh();
+      ui.toast('設定を保存したよ')
+    } catch (err) {
+      e.target.checked = false;
+      ui.toast(err.message)
+    }
+  }
+  if (e.target.dataset.action === 'import') {
+    try {
+      await restore(JSON.parse(await e.target.files[0].text()));
+      await refresh();
+      ui.toast('データを読み込んだよ')
+    } catch (err) { ui.toast(err.message || '読み込みに失敗したよ') }
+  }
+});
+
+window.addEventListener('hashchange', render);
+async function init() {
+  await load(); render();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+  start();
+}
+init().catch(e => { console.error(e); app.innerHTML = '<div class="empty">データを読み込めなかったよ。</div>' });
