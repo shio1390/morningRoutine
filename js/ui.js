@@ -61,7 +61,7 @@ export function home(rows, date) {
       return `<button class="todo-item ${d ? 'is-done' : ''}" data-action="toggle" data-id="${r.id}" aria-pressed="${d}" style="display:flex; align-items:center; width:100%; padding:20px 24px; border-radius:20px; border:3px solid ${border}; background:${bg}; text-align:left; font-size:1.4rem; cursor:pointer; gap:16px; transition:all 0.2s; box-sizing:border-box; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
         <span class="item-icon" style="font-size:2.2rem; flex-shrink:0; ${d ? 'opacity:0.5;' : ''}">${esc(r.icon || '✨')}</span>
         <span class="item-text" style="flex-grow:1; font-weight:bold; color:${textColor}; ${d ? 'text-decoration:line-through;' : ''}">${esc(r.text)}</span>
-        <span class="item-status" style="font-size:1.8rem; flex-shrink:0;">${d ? '✅' : '⬜'}</span>
+        <span class="item-status" style="font-size:1.8rem; flex-shrink:0;">${d ? '✔' : '⬜'}</span>
       </button>`
     }).join('')}
     ${isAllDone ? `<div style="text-align:center; margin-top:24px;"><button class="primary-button" data-action="reset-routines" style="padding:18px 40px; font-size:1.3rem; border-radius:40px; background-color:#ff8e9e; color:white; border:none; cursor:pointer; font-weight:bold; box-shadow:0 8px 16px rgba(255,142,158,0.3);">またあした 👋</button></div>` : ''}
