@@ -1,0 +1,7 @@
+﻿/** IndexedDB access layer: all persistent app data stays in the browser. */
+const DB_NAME='asajitaku-db',VERSION=1;export const STORES={ROUTINES:'routines',FAVORITES:'favorites',SETTINGS:'settings'};
+function open(){return new Promise((ok,no)=>{const r=indexedDB.open(DB_NAME,VERSION);r.onupgradeneeded=()=>Object.values(STORES).forEach(s=>{if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s,{keyPath:'id'})});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
+async function tx(name,mode,fn){const db=await open();return new Promise((ok,no)=>{const t=db.transaction(name,mode);try{fn(t.objectStore(name))}catch(e){no(e)}t.oncomplete=()=>ok();t.onerror=()=>no(t.error)}).finally(()=>db.close())}
+export async function all(name){const db=await open();return new Promise((ok,no)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>{db.close();ok(r.result)};r.onerror=()=>{db.close();no(r.error)}})}export const put=(s,x)=>tx(s,'readwrite',o=>o.put(x));export const del=(s,id)=>tx(s,'readwrite',o=>o.delete(id));export const clear=s=>tx(s,'readwrite',o=>o.clear());
+export async function dump(){const data={};for(const s of Object.values(STORES))data[s]=await all(s);return{app:'asajitaku',version:VERSION,exportedAt:new Date().toISOString(),data}}
+export async function restore(x){if(!x?.data||!Object.values(STORES).every(s=>Array.isArray(x.data[s])))throw Error('このファイルは読み込めません');for(const s of Object.values(STORES)){await clear(s);for(const item of x.data[s])await put(s,item)}}
