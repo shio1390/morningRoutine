@@ -53,7 +53,6 @@ export function home(rows, date) {
   <div class="container-max" style="display:flex; flex-direction:column; gap:16px; margin-top:24px; padding-bottom:40px;">
     ${sort(rows).map(r => {
       const d = r.completedDates?.includes(date);
-      // ① 完了時の色を緑から変更。未完了はテーマカラー（ピンク）の太枠で可愛く、完了後はグレー系で落ち着かせるデザイン
       const bg = d ? '#f8f9fa' : '#ffffff';
       const border = d ? '#e9ecef' : '#ff8e9e';
       const textColor = d ? '#adb5bd' : '#333333';
@@ -61,7 +60,7 @@ export function home(rows, date) {
       return `<button class="todo-item ${d ? 'is-done' : ''}" data-action="toggle" data-id="${r.id}" aria-pressed="${d}" style="display:flex; align-items:center; width:100%; padding:20px 24px; border-radius:20px; border:3px solid ${border}; background:${bg}; text-align:left; font-size:1.4rem; cursor:pointer; gap:16px; transition:all 0.2s; box-sizing:border-box; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
         <span class="item-icon" style="font-size:2.2rem; flex-shrink:0; ${d ? 'opacity:0.5;' : ''}">${esc(r.icon || '✨')}</span>
         <span class="item-text" style="flex-grow:1; font-weight:bold; color:${textColor}; ${d ? 'text-decoration:line-through;' : ''}">${esc(r.text)}</span>
-        <span class="item-status" style="font-size:1.8rem; flex-shrink:0;">${d ? '✔' : '⬜'}</span>
+        <span class="item-status" style="font-size:1.8rem; flex-shrink:0;">${d ? '✅' : '⬜'}</span>
       </button>`
     }).join('')}
     ${isAllDone ? `<div style="text-align:center; margin-top:24px;"><button class="primary-button" data-action="reset-routines" style="padding:18px 40px; font-size:1.3rem; border-radius:40px; background-color:#ff8e9e; color:white; border:none; cursor:pointer; font-weight:bold; box-shadow:0 8px 16px rgba(255,142,158,0.3);">またあした 👋</button></div>` : ''}
@@ -128,7 +127,66 @@ export function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2600)
 }
 
+// ▼ ここが新しい手書き風アニメーションのはなまるです！
 export function hanamaru() {
-  document.querySelector('#modal-root').innerHTML = `${ipadStyles}<div class="hanamaru-overlay"><div class="hanamaru" style="font-size:2rem; padding:40px; border-radius:40px;">🌸 はなまる！！ 🌸<small style="display:block; font-size:1.3rem; margin-top:16px;">ぜんぶできたね！すごい！</small></div></div>`;
-  setTimeout(() => document.querySelector('#modal-root').innerHTML = '', 2600)
+  const animStyles = `
+    <style>
+      .hanamaru-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(255, 255, 255, 0.92); z-index: 10000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        opacity: 0; animation: fade-in 0.3s forwards;
+      }
+      .svg-hanamaru {
+        width: 240px; height: 240px; margin-bottom: 24px;
+        filter: drop-shadow(0 6px 12px rgba(255,71,87,0.25));
+      }
+      .hana-line {
+        fill: none; stroke: #ff4757; stroke-width: 9; 
+        stroke-linecap: round; stroke-linejoin: round;
+        stroke-dasharray: 2000; stroke-dashoffset: 2000;
+      }
+      /* 中心からぐるぐると花びらを順番に描くアニメーション */
+      .hana-spiral { animation: draw 0.6s ease-in forwards; }
+      .hana-petals { animation: draw 1.2s ease-out 0.6s forwards; }
+      
+      @keyframes draw { to { stroke-dashoffset: 0; } }
+      @keyframes fade-in { to { opacity: 1; } }
+      
+      .hana-text {
+        font-size: 2.2rem; font-weight: bold; color: #ff4757; text-align: center;
+        opacity: 0; transform: scale(0.5);
+        /* 線が描き終わる頃(1.8秒後)にポンッ！と文字が出る */
+        animation: pop-text 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 1.8s forwards;
+      }
+      .hana-text small { display: block; font-size: 1.4rem; margin-top: 16px; color: #666; font-weight: normal; }
+      
+      @keyframes pop-text {
+        0% { opacity: 0; transform: scale(0.5); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+    </style>
+  `;
+
+  // 手書き風に作った花丸のベクター(SVG)パス
+  const hanamaruHTML = `
+    ${animStyles}
+    <div class="hanamaru-overlay">
+      <svg viewBox="0 0 200 200" class="svg-hanamaru">
+        <!-- 渦巻き部分 -->
+        <path class="hana-line hana-spiral" d="M 100 100 C 110 90, 115 110, 100 110 C 80 110, 80 85, 100 85 C 125 85, 125 125, 100 125 C 70 125, 70 75, 100 75 C 130 75, 130 100, 130 100" />
+        <!-- 花びら部分 -->
+        <path class="hana-line hana-petals" d="M 130 100 C 160 80, 170 120, 130 125 C 160 160, 110 180, 85 135 C 50 170, 20 140, 60 115 C 20 90, 40 40, 80 75 C 90 30, 140 30, 125 75 C 170 40, 170 90, 130 100" />
+      </svg>
+      <div class="hana-text">
+        🌸 はなまる！！ 🌸
+        <small>ぜんぶできたね！すごい！</small>
+      </div>
+    </div>
+  `;
+
+  document.querySelector('#modal-root').innerHTML = hanamaruHTML;
+  
+  // アニメーションを長く楽しめるように、表示時間を4.5秒 (4500ms) に延長
+  setTimeout(() => document.querySelector('#modal-root').innerHTML = '', 4500);
 }
